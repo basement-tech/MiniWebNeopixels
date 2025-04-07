@@ -146,9 +146,6 @@ int8_t neo_is_user(const char *label)  {
  */
 int8_t neo_load_sequence(const char *file)  {
 
-  FSInfo fs_info;
-  LittleFS.info(fs_info);
-
   JsonDocument jsonDoc;
   DeserializationError err;
 
@@ -158,12 +155,6 @@ int8_t neo_load_sequence(const char *file)  {
   char *pbuf;  // helper
  
   pbuf = buf;
-
-  /*
-   * can I see the FS from here ? ... yep.
-   */
-  DEBUG_INFO("Total bytes in FS = %d\n", fs_info.totalBytes);
-  DEBUG_INFO("Total bytes used in FS = %d\n", fs_info.usedBytes);
 
   /*
    * read the contents of the user sequence file and put it

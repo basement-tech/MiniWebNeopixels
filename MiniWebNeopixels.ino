@@ -133,6 +133,9 @@
  *   seems that, perhaps, the esp32 version was written first?
  * - moved from esp8266 specific timer library to a more arduino-generic,
  *   built-in version of timers.
+ * - LittleFS in esp32 bsp seems to have lost the FS_Info structure; modified
+ * - LittleFS interface for opening and listing directory contents changed; modified
+ * 
  * o made sure RMT was being used for neopixel updates
  *
  *
@@ -188,7 +191,7 @@
  *      (if prompted for credentials and none are configured, put any characters in the field)
  * 
  *
- * (c) Daniel J. Zimmerman  Jan 2025
+ * (c) Daniel J. Zimmerman  Apr 2025
  *
  */
 
@@ -204,6 +207,8 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <Arduino_DebugUtils.h>
+
+#include <WiFi.h>
 
 #include "secrets.h"  // add WLAN Credentials in here.
 
@@ -295,18 +300,20 @@ void handleRedirect() {
 // This function is called when the WebServer was requested to list all existing files in the filesystem.
 // a JSON array with file information is returned.
 void handleListFiles() {
-  Dir dir = LittleFS.openDir("/");
+  File dir = LittleFS.open("/");
   String result;
 
   result += "[\n";
-  while (dir.next()) {
-    if (result.length() > 4) { result += ","; }
+  while (File entry = dir.openNextFile()) {
+    if (result.length() > 4) {
+      result += ",\n";
+    }
     result += "  {";
-    result += " \"name\": \"" + dir.fileName() + "\", ";
-    result += " \"size\": " + String(dir.fileSize()) + ", ";
-    result += " \"time\": " + String(dir.fileTime());
-    result += " }\n";
-    // jc.addProperty("size", dir.fileSize());
+    result += "\"type\": \"file\", ";
+    result += "\"name\": \"" + String(entry.name()) + "\", ";
+    result += "\"size\": " + String(entry.size()) + ", ";
+    result += "\"time\": " + String(entry.getLastWrite());
+    result += "}";
   }  // while
   result += "]";
   server.sendHeader("Cache-Control", "no-cache");
