@@ -540,6 +540,7 @@ hw_timer_t *ITimer;   // esp32 timer structure
 volatile bool neo_timer_active = false;
 void IRAM_ATTR neoTimerHandler(void) {
   neo_timer_active = true;
+  timerWrite(ITimer, 0);
 }
 
 
@@ -636,7 +637,8 @@ void setup(void) {
    * wait to do this until after eeprom work so that
    * we know whether to format the fs.
    */
-
+  bool fsrtn = false;
+  #ifdef HOLD_THIS
   if(strcmp(pmon_config->reformat, "true") == 0)  {
     DEBUG_INFO("Formatting the filesystem...\n");
     if (!LittleFS.format())
@@ -647,6 +649,16 @@ void setup(void) {
   delay(500);
   DEBUG_INFO("Mounting the filesystem...\n");
   if (!LittleFS.begin())
+    DEBUG_ERROR("ERROR: Could not mount the filesystem...\n");
+  else  {
+    DEBUG_INFO("Mount successful\n");
+    DEBUG_INFO("fsTotalBytes: %d\n", LittleFS.totalBytes());
+    DEBUG_INFO("fsUsedBytes: %d\n", LittleFS.usedBytes());
+  }
+  #endif
+
+  DEBUG_INFO("Formatting the filesystem...\n");
+  if(!LittleFS.begin(true))
     DEBUG_ERROR("ERROR: Could not mount the filesystem...\n");
   else  {
     DEBUG_INFO("Mount successful\n");
@@ -898,7 +910,6 @@ void setup(void) {
   if((ITimer = timerBegin(ITIMER_FREQUENCY)) != NULL)  {
     timerAttachInterrupt(ITimer, neoTimerHandler);
     timerAlarm(ITimer, ITIMER_INTERVAL, true, 0);
-    timerStart(ITimer);
     DEBUG_DEBUG("Setup: neopixel timer setup successful\n");
   }
   else
