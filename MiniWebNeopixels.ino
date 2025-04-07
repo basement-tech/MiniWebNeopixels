@@ -133,8 +133,10 @@
  *   seems that, perhaps, the esp32 version was written first?
  * - moved from esp8266 specific timer library to a more arduino-generic,
  *   built-in version of timers.
+ * - Now needed wifi.h explicitly for wifi status
  * - LittleFS in esp32 bsp seems to have lost the FS_Info structure; modified
  * - LittleFS interface for opening and listing directory contents changed; modified
+ * - configTime() is now configTzTime() ... blah !
  * 
  * o made sure RMT was being used for neopixel updates
  *
@@ -330,7 +332,7 @@ void handleSysInfo() {
   result += "  \"freeHeap\": " + String(ESP.getFreeHeap()) + ",\n";
   result += "  \"fsTotalBytes\": " + String(LittleFS.totalBytes()) + ",\n";
   result += "  \"fsUsedBytes\": " + String(LittleFS.usedBytes()) + ",\n";
-  result += "  \"Chip ID\": " + String(ESP.getChipId()) + ",\n";
+  result += "  \"Chip ID\": " + String(ESP.getChipModel()) + ",\n";
   result += "  \"CPU Frequency\": " + String(ESP.getCpuFreqMHz()) + "MHz" + ",\n";
   result += "  \"firmware version\": " + String(EEPROM_VALID) + ",\n";
   result += "}";
@@ -480,7 +482,7 @@ public:
   }  // canUpload()
 
 
-  bool handle(ESP8266WebServer &server, HTTPMethod requestMethod, const String &requestUri) override {
+  bool handle(WebServer &server, HTTPMethod requestMethod, const String &requestUri) override {
     // ensure that filename starts with '/'
     String fName = requestUri;
     if (!fName.startsWith("/")) { fName = "/" + fName; }
@@ -501,7 +503,7 @@ public:
 
 
   // uploading process
-  void upload(ESP8266WebServer UNUSED &server, const String UNUSED &_requestUri, HTTPUpload &upload) override {
+  void upload(WebServer UNUSED &server, const String UNUSED &_requestUri, HTTPUpload &upload) override {
     // ensure that filename starts with '/'
     String fName = upload.filename;
     if (!fName.startsWith("/")) { fName = "/" + fName; }
@@ -534,7 +536,7 @@ protected:
 #define ITIMER_FREQUENCY  (uint32_t)1000000    // 1 MHz Clock
 #define ITIMER_INTERVAL   (uint64_t)2000       // number of cycles of ITIMER_FREQUENCY cycles
 
-hw_timer_t ITimer;   // esp32 timer type
+hw_timer_t *ITimer;   // esp32 timer structure
 volatile bool neo_timer_active = false;
 void IRAM_ATTR neoTimerHandler(void) {
   neo_timer_active = true;
@@ -634,7 +636,6 @@ void setup(void) {
    * wait to do this until after eeprom work so that
    * we know whether to format the fs.
    */
-  FSInfo fs_info;
 
   if(strcmp(pmon_config->reformat, "true") == 0)  {
     DEBUG_INFO("Formatting the filesystem...\n");
@@ -648,10 +649,9 @@ void setup(void) {
   if (!LittleFS.begin())
     DEBUG_ERROR("ERROR: Could not mount the filesystem...\n");
   else  {
-    LittleFS.info(fs_info);
     DEBUG_INFO("Mount successful\n");
-    DEBUG_INFO("fsTotalBytes: %d\n", fs_info.totalBytes);
-    DEBUG_INFO("fsUsedBytes: %d\n", fs_info.usedBytes);
+    DEBUG_INFO("fsTotalBytes: %d\n", LittleFS.totalBytes());
+    DEBUG_INFO("fsUsedBytes: %d\n", LittleFS.usedBytes());
   }
   delay(500);
 
@@ -800,9 +800,9 @@ void setup(void) {
   // Ask for the current time using NTP request builtin into ESP firmware.
   DEBUG_INFO("Setup ntp...\n");
   if(strlen(pmon_config->tz_offset_gmt) > 0)
-    configTime(pmon_config->tz_offset_gmt, "pool.ntp.org");
+    configTzTime(pmon_config->tz_offset_gmt, "pool.ntp.org");
   else
-    configTime(TIMEZONE, "pool.ntp.org");
+    configTzTime(TIMEZONE, "pool.ntp.org");
 
   DEBUG_INFO("Register service handlers...\n");
 
