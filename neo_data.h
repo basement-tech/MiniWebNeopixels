@@ -4,7 +4,6 @@
  */
 #ifndef __NEO_DATA_H__
 
-#include <c_types.h>
 #include <Adafruit_NeoPixel.h>
 
 #define NEO_SEQ_STRATEGIES 6

@@ -1,5 +1,7 @@
 /*
- * MechWarriorsWebNeopixels
+ * MiniWebNeopixels
+ *
+ * port of previous work for esp32 platform
  *
  * brief: define and control the playing of a sequence on a string of neopixels
  * using buttons on a web-enabled application.
@@ -125,6 +127,14 @@
  *  value seemed to eliminate it.  Although might have just been that
  *  the update got faster ?
  *
+ * Porting from esp8266 to esp32 - primary areas of change:
+ * - since the webserver was written by the same person, just had to
+ *   delete the "esp8266" from the include file and name of the instance.
+ *   seems that, perhaps, the esp32 version was written first?
+ * - moved from esp8266 specific timer library to a more arduino-generic,
+ *   built-in version of timers.
+ * o made sure RMT was being used for neopixel updates
+ *
  *
  * TODO (x = done):
  * o figure out why the ntp/time stuff doesn't work
@@ -191,16 +201,18 @@
 // 21.07.2021 creation, first version
 
 #include <Arduino.h>
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 #include <ArduinoJson.h>
 #include <Arduino_DebugUtils.h>
 
 #include "secrets.h"  // add WLAN Credentials in here.
 
+#include "esp_partition.h"  // to check existing data partitions in Flash memory
+
 #include <FS.h>        // File System for Web Server Files
 #include <LittleFS.h>  // This file system is used.
+
 #include <ArduinoOTA.h>  // Over-the-air updates
-#include <ESP8266TimerInterrupt.h>  // neopixel timer
 
 #include "bt_eepromlib.h"
 #include "neo_data.h"  // for neopixels
@@ -210,11 +222,8 @@
 // mark parameters not used in example
 #define UNUSED __attribute__((unused))
 
-// TRACE output simplified, can be deactivated here ... replaced with Arduino debug library
-//#define TRACE(...) Serial.printf(__VA_ARGS__)
-
 // name of the server. You reach it using http://webserver
-#define HOSTNAME "warhammer"
+#define HOSTNAME "necromundo"
 
 // local time zone definition (US Central Daylight Time)
 #define TIMEZONE "CST6CDT,M3.2.0/2:00:00,M11.1.0/2:00:00"
@@ -250,13 +259,16 @@ httpd_config_t config = {
   .keep_alive_count = 3; // default
 };
 // Start the server
-ESP8266WebServer server(config);
+WebServer server(config);
 
 #else
+// enable the CUSTOM_ETAG_CALC to enable calculation of ETags by a custom function
+#define CUSTOM_ETAG_CALC
+
 /*
  * need a WebServer for http access on port 80.
  */
-ESP8266WebServer server(80);
+WebServer server(80);
 
 #endif
 
@@ -306,14 +318,11 @@ void handleListFiles() {
 void handleSysInfo() {
   String result;
 
-  FSInfo fs_info;
-  LittleFS.info(fs_info);
-
   result += "{\n";
   result += "  \"flashSize\": " + String(ESP.getFlashChipSize()) + ",\n";
   result += "  \"freeHeap\": " + String(ESP.getFreeHeap()) + ",\n";
-  result += "  \"fsTotalBytes\": " + String(fs_info.totalBytes) + ",\n";
-  result += "  \"fsUsedBytes\": " + String(fs_info.usedBytes) + ",\n";
+  result += "  \"fsTotalBytes\": " + String(LittleFS.totalBytes()) + ",\n";
+  result += "  \"fsUsedBytes\": " + String(LittleFS.usedBytes()) + ",\n";
   result += "  \"Chip ID\": " + String(ESP.getChipId()) + ",\n";
   result += "  \"CPU Frequency\": " + String(ESP.getCpuFreqMHz()) + "MHz" + ",\n";
   result += "  \"firmware version\": " + String(EEPROM_VALID) + ",\n";
@@ -515,12 +524,10 @@ protected:
  * set up the global parameters and timer callback for neopixel
  * service function
  */
-// Select a Timer Clock (note: this is acted upon by some #defines in the class definition file)
-#define USING_TIM_DIV1                false           // for shortest and most accurate timer  (80MHz)
-#define USING_TIM_DIV16               true            // for medium time and medium accurate timer (5 MHz)
-#define USING_TIM_DIV256              false           // for longest timer but least accurate.  (312.5 KHz)
+#define ITIMER_FREQUENCY  (uint32_t)1000000    // 1 MHz Clock
+#define ITIMER_INTERVAL   (uint64_t)2000       // number of cycles of ITIMER_FREQUENCY cycles
 
-ESP8266Timer ITimer;   // Init ESP8266 timer 1
+hw_timer_t ITimer;   // esp32 timer type
 volatile bool neo_timer_active = false;
 void IRAM_ATTR neoTimerHandler(void) {
   neo_timer_active = true;
@@ -877,15 +884,18 @@ void setup(void) {
   }
 
   /*
-   * set up the timer for the neopixel service routime
+   * set up the timer for the neopixel service routine
+   * e.g. timer was originally set with frequency of 1MHz and Interval of 2mS (2000).
+   * timerAlarm() arguments set the timer to autoreload and no limit of reloads.
    */
-#if !defined(ESP8266)
-  #error This code is designed to run on ESP8266 and ESP8266-based boards! Please check your Tools->Board setting.
-#endif
-  if (ITimer.attachInterruptInterval(NEO_UPDATE_INTERVAL, neoTimerHandler))
+  if((ITimer = timerBegin(ITIMER_FREQUENCY)) != NULL)  {
+    timerAttachInterrupt(ITimer, neoTimerHandler);
+    timerAlarm(ITimer, ITIMER_INTERVAL, true, 0);
+    timerStart(ITimer);
     DEBUG_DEBUG("Setup: neopixel timer setup successful\n");
+  }
   else
-        DEBUG_ERROR("ERROR: Setup: error: neopixel timer setup failed\n");
+    DEBUG_ERROR("ERROR: Setup: error: neopixel timer setup failed\n");
 
   /*
    * set up a pin for debugging
@@ -910,7 +920,7 @@ void loop(void) {
    * are needed are on a timer that sets  neo_timer_active
    *
    * With the debug pin configured as shown, the following timings
-   * were observed:
+   * were observed on esp8266 (pre-port to esp32):
    * no update: ~10uS pulse width every 2 mS
    * (apparent) update running rainbow : ~1.75 mS pulse width every other call to neo_cycle_next()
    * (apparent) update running slowp: ~1.5 mS pulse width every other call to neo_cycle_next()

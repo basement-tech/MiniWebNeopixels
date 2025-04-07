@@ -1,5 +1,5 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <WiFi.h>
+#include <WebServer.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
 #include <Arduino_DebugUtils.h>
@@ -11,7 +11,7 @@
 #include "configSoftAP.h"
 
 
-ESP8266WebServer ap_server(80);  // Web server on port 80
+WebServer ap_server(80);  // Web server on port 80
 DNSServer dnsServer;           // DNS server for redirection
 //#define GET_CONFIG_BUF_SIZE (int32_t)5120
 #define GET_CONFIG_BUF_SIZE (int32_t)6044
