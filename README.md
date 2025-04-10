@@ -1,3 +1,5 @@
+*** This is an attempt to port the esp8266 version to esp32 under the Arduino IDE 2.0. ***
+
 The idea here is to use a webserver on the esp8266 to configure the pattern being
 played out by a string of neopixels to create an effect for the mech warriors
 table-top world.
